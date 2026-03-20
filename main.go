@@ -1,9 +1,15 @@
 package main
 
 import (
+	"database/sql"
+	"httpserver/internal/database"
 	"log"
 	"net/http"
+	"os"
 	"sync/atomic"
+
+	"github.com/joho/godotenv"
+	_ "github.com/lib/pq"
 )
 
 type filePaths struct {
@@ -13,6 +19,8 @@ type filePaths struct {
 
 type apiConfig struct{
 	fileserverHits atomic.Int32
+	dbQueries *database.Queries
+	role string
 }
 
 func getHandlers(mux *http.ServeMux, fileDirs filePaths, cfg *apiConfig){
@@ -20,7 +28,9 @@ func getHandlers(mux *http.ServeMux, fileDirs filePaths, cfg *apiConfig){
 	mux.Handle("/assets/", http.StripPrefix("/assets/", http.FileServer(http.Dir(fileDirs.assets))))
 	mux.HandleFunc("GET /api/healthz", handlerReadiness)
 	mux.HandleFunc("GET /admin/metrics", cfg.numberofHits)
-	mux.HandleFunc("POST /admin/reset", cfg.resetHits)
+	mux.HandleFunc("POST /admin/reset", cfg.resetUsersHandler)
+	mux.HandleFunc("POST /api/validate_chirp", validateLengthHandler)
+	mux.HandleFunc("POST /api/users", cfg.createUserHandler)
 }
 
 func handlerReadiness(w http.ResponseWriter, r *http.Request){
@@ -35,9 +45,25 @@ func handlerReadiness(w http.ResponseWriter, r *http.Request){
 
 
 func main(){
+	godotenv.Load()
+	var dbURL string = os.Getenv("DB_URL")
+	if dbURL == "" {
+		log.Fatal("DB_URL environment variable is not set")
+	}
+
+	var platform string = os.Getenv("PLATFORM")
+
+	db, err := sql.Open("postgres", dbURL)
+	if err != nil {
+		log.Fatalf("Failed to connect to the database: %s", err)
+	}
+	defer db.Close()
+	
 	const addr string = ":8080"
 	var cfg apiConfig = apiConfig{
 		fileserverHits: atomic.Int32{},
+		dbQueries: database.New(db),
+		role: platform,
 	}
 	var fileDirs filePaths = filePaths{
 		app: "./app/",
