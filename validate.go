@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -32,31 +33,45 @@ func jsonResponse(w http.ResponseWriter, statusCode int, data interface{}){
 	}
 }
 
-func validateLengthHandler(w http.ResponseWriter, req *http.Request){
-	type requestPayload struct {
-		Body string `json:"body"`
-	}
+// func validateLengthHandler(w http.ResponseWriter, req *http.Request) (string, error) {
+// 	type requestPayload struct {
+// 		Body string `json:"body"`
+// 	}
 
-	// Decode the JSON payload from the request body
-	var decoder *json.Decoder = json.NewDecoder(req.Body)
-	defer req.Body.Close()
-	// Initialize an empty payload struct to hold the decoded data
-	var payload requestPayload = requestPayload{}
+// 	// Decode the JSON payload from the request body
+// 	var decoder *json.Decoder = json.NewDecoder(req.Body)
+// 	defer req.Body.Close()
+// 	// Initialize an empty payload struct to hold the decoded data
+// 	var payload requestPayload = requestPayload{}
 
-	if err := decoder.Decode(&payload); err != nil{
-		errorResponse(w, http.StatusInternalServerError, fmt.Sprintf("Error decoding parameters: %s", err))
-		return
-	}
+// 	if err := decoder.Decode(&payload); err != nil{
+// 		errorResponse(w, http.StatusInternalServerError, fmt.Sprintf("Error decoding parameters for chirp creation: %s", err))
+// 		return "", err
+// 	}
 
+// 	const maxLength int = 140
+
+// 	if len(payload.Body) > maxLength{
+// 		errorResponse(w, http.StatusBadRequest, fmt.Sprintf("Body exceeds %d characters", maxLength))
+// 		return "", errors.New("Body exceeds maximum length")
+// 	}
+
+// 	var cleanedBody string = profanityChecker(payload.Body)
+// 	// jsonResponse(w, http.StatusOK, map[string]string{"cleaned_body": cleanedBody})
+// 	return cleanedBody, nil
+// }
+
+
+func validateLengthHandler(w http.ResponseWriter, chirp string) (string, error) {
 	const maxLength int = 140
 
-	if len(payload.Body) > maxLength{
+	if len(chirp) > maxLength{
 		errorResponse(w, http.StatusBadRequest, fmt.Sprintf("Body exceeds %d characters", maxLength))
-		return
+		return "", errors.New("Body exceeds maximum length")
 	}
 
-	var cleanedBody string = profanityChecker(payload.Body)
-	jsonResponse(w, http.StatusOK, map[string]string{"cleaned_body": cleanedBody})
+	var cleanedBody string = profanityChecker(chirp)
+	return cleanedBody, nil
 }
 
 

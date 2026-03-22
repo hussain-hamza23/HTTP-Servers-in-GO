@@ -26,11 +26,18 @@ type apiConfig struct{
 func getHandlers(mux *http.ServeMux, fileDirs filePaths, cfg *apiConfig){
 	mux.Handle("/app/", cfg.middlewareMetricsIncrement(http.StripPrefix("/app", http.FileServer(http.Dir(fileDirs.app)))))
 	mux.Handle("/assets/", http.StripPrefix("/assets/", http.FileServer(http.Dir(fileDirs.assets))))
+	//Metrics
 	mux.HandleFunc("GET /api/healthz", handlerReadiness)
 	mux.HandleFunc("GET /admin/metrics", cfg.numberofHits)
 	mux.HandleFunc("POST /admin/reset", cfg.resetUsersHandler)
-	mux.HandleFunc("POST /api/validate_chirp", validateLengthHandler)
+
+	//Create requests
+	mux.HandleFunc("POST /api/chirps", cfg.createChirpHandler)
 	mux.HandleFunc("POST /api/users", cfg.createUserHandler)
+	//Retreive requests
+	mux.HandleFunc("GET /api/chirps", cfg.getAllChirpsHandler)
+	mux.HandleFunc("GET /api/chirps/{id}", cfg.getSingleChirpHandler)
+	mux.HandleFunc("POST /api/login", cfg.loginHandler)
 }
 
 func handlerReadiness(w http.ResponseWriter, r *http.Request){
@@ -57,7 +64,7 @@ func main(){
 	if err != nil {
 		log.Fatalf("Failed to connect to the database: %s", err)
 	}
-	defer db.Close()
+	//defer db.Close()
 	
 	const addr string = ":8080"
 	var cfg apiConfig = apiConfig{
