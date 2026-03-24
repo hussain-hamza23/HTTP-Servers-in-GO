@@ -13,6 +13,16 @@ RETURNING *;
 SELECT * FROM chirps
 ORDER BY created_at;
 
--- name: GetSingleChirp :one
+-- name: GetChirpsByAuthorID :many
 SELECT * FROM chirps
-WHERE id = $1;
+WHERE user_id = $1
+ORDER BY created_at;
+
+-- -- name: GetSingleChirp :one
+-- SELECT * FROM chirps
+-- WHERE id = $1;
+
+-- name: DeleteChirpFromID :execresult
+DELETE FROM chirps
+WHERE id = $1
+AND user_id = $2;

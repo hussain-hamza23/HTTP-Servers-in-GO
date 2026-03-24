@@ -7,6 +7,7 @@ package database
 
 import (
 	"context"
+	"database/sql"
 
 	"github.com/google/uuid"
 )
@@ -39,6 +40,25 @@ func (q *Queries) CreateChirp(ctx context.Context, arg CreateChirpParams) (Chirp
 		&i.UserID,
 	)
 	return i, err
+}
+
+const deleteChirpFromID = `-- name: DeleteChirpFromID :execresult
+
+DELETE FROM chirps
+WHERE id = $1
+AND user_id = $2
+`
+
+type DeleteChirpFromIDParams struct {
+	ID     uuid.UUID
+	UserID uuid.UUID
+}
+
+// -- name: GetSingleChirp :one
+// SELECT * FROM chirps
+// WHERE id = $1;
+func (q *Queries) DeleteChirpFromID(ctx context.Context, arg DeleteChirpFromIDParams) (sql.Result, error) {
+	return q.db.ExecContext(ctx, deleteChirpFromID, arg.ID, arg.UserID)
 }
 
 const getAllChirps = `-- name: GetAllChirps :many
@@ -75,20 +95,37 @@ func (q *Queries) GetAllChirps(ctx context.Context) ([]Chirp, error) {
 	return items, nil
 }
 
-const getSingleChirp = `-- name: GetSingleChirp :one
+const getChirpsByAuthorID = `-- name: GetChirpsByAuthorID :many
 SELECT id, created_at, updated_at, body, user_id FROM chirps
-WHERE id = $1
+WHERE user_id = $1
+ORDER BY created_at
 `
 
-func (q *Queries) GetSingleChirp(ctx context.Context, id uuid.UUID) (Chirp, error) {
-	row := q.db.QueryRowContext(ctx, getSingleChirp, id)
-	var i Chirp
-	err := row.Scan(
-		&i.ID,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.Body,
-		&i.UserID,
-	)
-	return i, err
+func (q *Queries) GetChirpsByAuthorID(ctx context.Context, userID uuid.UUID) ([]Chirp, error) {
+	rows, err := q.db.QueryContext(ctx, getChirpsByAuthorID, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Chirp
+	for rows.Next() {
+		var i Chirp
+		if err := rows.Scan(
+			&i.ID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Body,
+			&i.UserID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }

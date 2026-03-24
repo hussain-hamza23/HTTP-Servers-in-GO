@@ -1,10 +1,10 @@
 package main
 
 import (
-	"encoding/json"
 	"httpserver/internal/auth"
 	"httpserver/internal/database"
 	"net/http"
+	"sort"
 	"time"
 
 	"github.com/google/uuid"
@@ -33,17 +33,9 @@ func (cfg *apiConfig)createChirpHandler(w http.ResponseWriter, req *http.Request
 		Body string `json:"body"`
 	}
 
-	var payload requestPayload = requestPayload{}
-	decoder := json.NewDecoder(req.Body)
-	defer req.Body.Close()
-	if err := decoder.Decode(&payload); err != nil{
-		httpError := &HTTPError{
-			StatusCode: http.StatusBadRequest,
-			Message: ErrDecodingRequest,
-			Err: err,
-		}
-		httpError.errorResponse(w)
-		return
+	payload, e := decodeRequest[requestPayload](w, req)
+	if e != nil{
+		return 
 	}
 
 	token, err := auth.GetBearerToken(req.Header)
@@ -92,7 +84,7 @@ func (cfg *apiConfig)createChirpHandler(w http.ResponseWriter, req *http.Request
 	jsonResponse(w, http.StatusCreated, newChirp)
 }
 
-func (cfg *apiConfig)getAllChirpsHandler(w http.ResponseWriter, req *http.Request){
+func getAllChirpsHandler(w http.ResponseWriter, req *http.Request, cfg *apiConfig) ([]chirpPayload, *HTTPError){
 	chirps, err := cfg.dbQueries.GetAllChirps(req.Context())
 	if err != nil {
 		httpError := &HTTPError{
@@ -101,18 +93,42 @@ func (cfg *apiConfig)getAllChirpsHandler(w http.ResponseWriter, req *http.Reques
 			Err: err,
 		}
 		httpError.errorResponse(w)
-		return
+		return nil, httpError
 	}
 
 	var response []chirpPayload = make([]chirpPayload,0, len(chirps))
 	for _, chirp := range chirps{
 		response = append(response, newChirpPayload(chirp))
 	}
-	jsonResponse(w, http.StatusOK, response)
+	return response, nil
 }
 
-func (cfg *apiConfig)getSingleChirpHandler(w http.ResponseWriter, req *http.Request){
-	id, err := uuid.Parse(req.PathValue("id"))
+func (cfg *apiConfig)getChirpsHandler(w http.ResponseWriter, req *http.Request){
+	var authorQuery string = req.URL.Query().Get("author_id")
+	var sortQuery string = req.URL.Query().Get("sort")
+	if sortQuery == ""{
+		sortQuery = "asc"
+	}
+
+	if authorQuery == ""{
+		chirps, err := getAllChirpsHandler(w, req, cfg)
+		if err != nil {
+			return
+		}
+		if sortQuery == "desc"{
+			sort.Slice(chirps, func(i, j int) bool{
+				return chirps[i].CreatedAt.After(chirps[j].CreatedAt)
+			})
+		} else{
+			sort.Slice(chirps, func(i, j int) bool{
+				return chirps[i].CreatedAt.Before(chirps[j].CreatedAt)
+			})
+		}
+		jsonResponse(w, http.StatusOK, chirps)
+		return
+	}
+
+	authorID, err := uuid.Parse(authorQuery)
 	if err != nil {
 		httpError := &HTTPError{
 			StatusCode: http.StatusBadRequest,
@@ -123,7 +139,7 @@ func (cfg *apiConfig)getSingleChirpHandler(w http.ResponseWriter, req *http.Requ
 		return
 	}
 
-	chirp, err := cfg.dbQueries.GetSingleChirp(req.Context(), id)
+	chirps, err := cfg.dbQueries.GetChirpsByAuthorID(req.Context(), authorID)
 	if err != nil {
 		httpError := &HTTPError{
 			StatusCode: http.StatusNotFound,
@@ -134,7 +150,83 @@ func (cfg *apiConfig)getSingleChirpHandler(w http.ResponseWriter, req *http.Requ
 		return
 	}
 
-	response := newChirpPayload(chirp)
+	var response []chirpPayload = make([]chirpPayload, 0, len(chirps))
+	for _, chirp := range chirps {
+		response = append(response, newChirpPayload(chirp))
+	}
+	if sortQuery == "desc"{
+		sort.Slice(response, func(i, j int) bool{
+			return response[i].CreatedAt.After(response[j].CreatedAt)
+		})
+	} else{
+		sort.Slice(response, func(i, j int) bool{
+			return response[i].CreatedAt.Before(response[j].CreatedAt)
+		})
+	}
+
 
 	jsonResponse(w, http.StatusOK, response)
+}
+
+func (cfg *apiConfig)deleteChirpHandler(w http.ResponseWriter, req *http.Request){
+	id, err := uuid.Parse(req.PathValue("chirpID"))
+	if err != nil {
+		httpError := &HTTPError{
+			StatusCode: http.StatusBadRequest,
+			Message: "Invalid UUID",
+			Err: err,
+		}
+		httpError.errorResponse(w)
+		return
+	}
+
+	accessToken, err := auth.GetBearerToken(req.Header) 
+	if err != nil{
+		httpError := &HTTPError{
+			StatusCode: http.StatusUnauthorized,
+			Message: "Could not retrieve access token",
+			Err: err,
+		}
+		httpError.errorResponse(w)
+		return
+	}
+
+	userID, err := auth.ValidateJWT(accessToken, string(cfg.tokenSecret))
+	if err != nil{
+		httpError := &HTTPError{
+			StatusCode: http.StatusUnauthorized,
+			Message: ErrInvalidToken,
+			Err: err,
+		}
+		httpError.errorResponse(w)
+		return
+	}
+
+	deleteChirpParams := database.DeleteChirpFromIDParams{
+		ID: id,
+		UserID: userID,
+	}
+
+	result, err := cfg.dbQueries.DeleteChirpFromID(req.Context(), deleteChirpParams)
+	if err != nil {
+		httpError := &HTTPError{
+			StatusCode: http.StatusInternalServerError,
+			Message: "Error deleting chirp",
+			Err: err,
+		}
+		httpError.errorResponse(w)
+		return
+	}
+
+	if rowsDeleted, err := result.RowsAffected(); err != nil || rowsDeleted == 0{
+		httpError := &HTTPError{
+			StatusCode: http.StatusForbidden,
+			Message: "User does not have permission to delete this chirp",
+			Err: err,
+		}
+		httpError.errorResponse(w)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }

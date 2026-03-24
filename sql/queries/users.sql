@@ -16,3 +16,15 @@ DELETE FROM users;
 -- name: GetUserByEmail :one
 SELECT * FROM users
 WHERE email = $1;
+
+-- name: UpdateEmailandPassword :one
+UPDATE users
+SET email = $1, password = $2, updated_at = NOW()
+WHERE id = $3
+RETURNING *;
+
+-- name: UpgradeToChirpyRed :one
+UPDATE users
+SET is_chirpy_red = TRUE, updated_at = NOW()
+WHERE id = $1
+RETURNING *;

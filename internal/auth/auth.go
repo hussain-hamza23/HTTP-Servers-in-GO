@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/alexedwards/argon2id"
@@ -64,24 +65,29 @@ func ValidateJWT(tokenString string, tokenSecret string) (uuid.UUID, error){
 	return userID, nil
 }
 
-func GetBearerToken(headers http.Header) (string, error){
+func getAuthToken(headers http.Header, tokenType string) (string, error){
 	var authHeader string = headers.Get("Authorization")
 	if authHeader == "" {
 		return "", fmt.Errorf("Authorization header is missing")
 	}
-	
-	i, err := fmt.Sscanf(authHeader, "Bearer %s", &authHeader)
-	if err != nil || i != 1 {
-		return "", fmt.Errorf("Invalid Authorization header format")
+	var prefix string = tokenType + " "
+	if !strings.HasPrefix(authHeader, prefix){
+		return "", fmt.Errorf("Invalid authorization header format")
 	}
-
-	return authHeader, nil
+	return strings.TrimPrefix(authHeader, prefix), nil
 }
 
+func GetBearerToken(headers http.Header) (string, error){
+	return getAuthToken(headers, "Bearer")
+}
 func MakeRefreshToken() string{
 	var key []byte = make([]byte, 32)
 	rand.Read(key)
 
 	return hex.EncodeToString(key)
+}
+
+func GetAPIKey(headers http.Header) (string, error){
+	return getAuthToken(headers, "ApiKey")
 }
 

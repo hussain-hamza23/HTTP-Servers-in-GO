@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"encoding/json"
 	"httpserver/internal/database"
 	"log"
 	"net/http"
@@ -23,10 +24,16 @@ func (ts TokenSecret) String() string{
 	return ""
 }
 
+type PolkaKey string
+func (pk PolkaKey) String() string{
+	return ""
+}
+
 type apiConfig struct{
 	fileserverHits atomic.Int64
 	dbQueries *database.Queries
 	tokenSecret TokenSecret
+	polkaKey PolkaKey
 	role string
 }
 
@@ -42,11 +49,15 @@ func getHandlers(mux *http.ServeMux, fileDirs *filePaths, cfg *apiConfig){
 	mux.HandleFunc("POST /api/chirps", cfg.createChirpHandler)
 	mux.HandleFunc("POST /api/users", cfg.createUserHandler)
 	//Retreive requests
-	mux.HandleFunc("GET /api/chirps", cfg.getAllChirpsHandler)
-	mux.HandleFunc("GET /api/chirps/{id}", cfg.getSingleChirpHandler)
+	mux.HandleFunc("GET /api/chirps", cfg.getChirpsHandler)
+	//mux.HandleFunc("GET /api/chirps/{id}", cfg.getSingleChirpHandler)
+	mux.HandleFunc("DELETE /api/chirps/{chirpID}", cfg.deleteChirpHandler)
 	mux.HandleFunc("POST /api/login", cfg.loginHandler)
 	mux.HandleFunc("POST /api/refresh", cfg.refreshTokensHandler)
 	mux.HandleFunc("POST /api/revoke", cfg.revokeTokenHandler)
+	mux.HandleFunc("PUT /api/users",cfg.updateUserPasswordHandler)
+
+	mux.HandleFunc("POST /api/polka/webhooks", cfg.upgradeToChirpyRedHandler)
 }
 
 func handlerReadiness(w http.ResponseWriter, r *http.Request){
@@ -57,6 +68,22 @@ func handlerReadiness(w http.ResponseWriter, r *http.Request){
 		return
 	}
 
+}
+
+func decodeRequest[T any](w http.ResponseWriter, req *http.Request) (T, *HTTPError){
+	var payload T
+	decoder := json.NewDecoder(req.Body)
+	defer req.Body.Close()
+	if err := decoder.Decode(&payload); err != nil{
+		httpError := &HTTPError{
+			StatusCode: http.StatusBadRequest,
+			Message: ErrDecodingRequest,
+			Err: err,
+		}
+		httpError.errorResponse(w)
+		return payload, httpError
+	}
+	return payload, nil
 }
 
 
@@ -71,6 +98,10 @@ func main(){
 	var tokenSecret TokenSecret = TokenSecret(os.Getenv("SECRET"))
 	if tokenSecret == "" {
 		log.Fatal("SECRET environment variable is not set")
+	}
+	var polkaKey PolkaKey = PolkaKey(os.Getenv("POLKA_KEY"))
+	if polkaKey == "" {
+		log.Fatal("POLKA_KEY environment variable is not set")
 	}
 
 	db, err := sql.Open("postgres", dbURL)
@@ -88,6 +119,7 @@ func main(){
 		fileserverHits: atomic.Int64{},
 		dbQueries: database.New(db),
 		tokenSecret: tokenSecret,
+		polkaKey: polkaKey,
 		role: platform,
 	}
 	var fileDirs filePaths = filePaths{

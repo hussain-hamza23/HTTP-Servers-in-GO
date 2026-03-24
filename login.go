@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"httpserver/internal/auth"
 	"httpserver/internal/database"
 	"net/http"
@@ -18,17 +17,21 @@ type requestPayload struct{
 
 func (cfg *apiConfig) loginHandler(w http.ResponseWriter, req *http.Request){
 
-	var payload requestPayload = requestPayload{}
-	decoder := json.NewDecoder(req.Body)
-	defer req.Body.Close()
-	if err := decoder.Decode(&payload); err != nil{
-		httpError := &HTTPError{
-			StatusCode: http.StatusBadRequest,
-			Message: ErrDecodingRequest,
-			Err: err,
-		}
-		httpError.errorResponse(w)
-		return
+	// var payload requestPayload = requestPayload{}
+	// decoder := json.NewDecoder(req.Body)
+	// defer req.Body.Close()
+	// if err := decoder.Decode(&payload); err != nil{
+	// 	httpError := &HTTPError{
+	// 		StatusCode: http.StatusBadRequest,
+	// 		Message: ErrDecodingRequest,
+	// 		Err: err,
+	// 	}
+	// 	httpError.errorResponse(w)
+	// 	return
+	// }
+	payload, e := decodeRequest[requestPayload](w, req)
+	if e != nil{
+		return 
 	}	
 
 	user, err := cfg.getUserInfo(req.Context(), payload)
@@ -74,6 +77,7 @@ func (cfg *apiConfig) getUserInfo(ctx context.Context, payload requestPayload) (
 		CreatedAt: user.CreatedAt,
 		UpdatedAt: user.UpdatedAt,
 		Email: user.Email,
+		IsChirpyRed: user.IsChirpyRed,
 	}
 	
 	return userResponse, nil
