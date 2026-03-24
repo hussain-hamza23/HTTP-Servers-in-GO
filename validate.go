@@ -18,7 +18,7 @@ func (err *HTTPError) Error() string{
 	return err.Message
 }
 
-var (
+const (
 	ErrInvalidCredentials = "incorrect email or password"
 	ErrUserNotFound = "user not found"
 	ErrInvalidToken = "invalid token"
@@ -28,6 +28,12 @@ var (
 	ErrEncodingResponse = "error encoding response"
 	ErrDecodingRequest = "error decoding request"
 )
+
+var profanityList map[string]struct{} = map[string]struct{}{
+	"kerfuffle": {},
+	"sharbert": {},
+	"fornax": {},
+}
 
 func (httpError *HTTPError) errorResponse(w http.ResponseWriter){
 	type errorResponse struct{
@@ -46,7 +52,7 @@ func (httpError *HTTPError) errorResponse(w http.ResponseWriter){
 	jsonResponse(w, httpError.StatusCode, response)
 }
 
-func jsonResponse(w http.ResponseWriter, statusCode int, data interface{}) {
+func jsonResponse(w http.ResponseWriter, statusCode int, data any) {
     dat, err := json.Marshal(data)
     if err != nil {
         w.Header().Set("Content-Type", "application/json; charset=utf-8")
@@ -110,11 +116,7 @@ func validateLengthHandler(w http.ResponseWriter, chirp string) (string, error) 
 
 
 func profanityChecker(body string) string{
-	var profanityList map[string]struct{} = map[string]struct{}{
-		"kerfuffle": {},
-		"sharbert": {},
-		"fornax": {},
-	}
+
 	const replacement string = "****"
 	var splitText []string = strings.Split(body, " ")
 

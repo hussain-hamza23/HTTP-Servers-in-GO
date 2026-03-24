@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	_ "github.com/lib/pq"
+	//_ "github.com/lib/pq"
 )
 
 type User struct{
@@ -32,7 +32,7 @@ func (cfg *apiConfig) createUserHandler(w http.ResponseWriter, req *http.Request
 	defer req.Body.Close()
 	if err := decoder.Decode(&payload); err != nil{
 		httpError := &HTTPError{
-			StatusCode: http.StatusInternalServerError,
+			StatusCode: http.StatusBadRequest,
 			Message: ErrDecodingRequest,
 			Err: err,
 		}
@@ -72,10 +72,11 @@ func (cfg *apiConfig) createUserHandler(w http.ResponseWriter, req *http.Request
 		CreatedAt: user.CreatedAt,
 		UpdatedAt: user.UpdatedAt,
 		Email: user.Email,
-		Token: "",
-		RefreshToken: "",
 	}
-
-
 	jsonResponse(w, http.StatusCreated, newUser)
+}
+
+
+func (cfg *apiConfig) updateUserHandler(w http.ResponseWriter, req *http.Request){
+
 }

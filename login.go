@@ -23,7 +23,7 @@ func (cfg *apiConfig) loginHandler(w http.ResponseWriter, req *http.Request){
 	defer req.Body.Close()
 	if err := decoder.Decode(&payload); err != nil{
 		httpError := &HTTPError{
-			StatusCode: http.StatusInternalServerError,
+			StatusCode: http.StatusBadRequest,
 			Message: ErrDecodingRequest,
 			Err: err,
 		}
@@ -37,21 +37,20 @@ func (cfg *apiConfig) loginHandler(w http.ResponseWriter, req *http.Request){
 		return
 	}
 
-	userWithTokens, err := cfg.generateTokens(&user, req.Context())
-	if err != nil{
+	if err := cfg.generateTokens(&user, req.Context()); err != nil{
 		err.errorResponse(w)
 		return
 	}
 
 
-	jsonResponse(w, http.StatusOK, userWithTokens)
+	jsonResponse(w, http.StatusOK, user)
 }
 
 func (cfg *apiConfig) getUserInfo(ctx context.Context, payload requestPayload) (User, *HTTPError){
 	user, err := cfg.dbQueries.GetUserByEmail(ctx, payload.Email)
 	if err != nil{
 		return User{}, &HTTPError{
-			StatusCode: http.StatusInternalServerError,
+			StatusCode: http.StatusUnauthorized,
 			Message: (ErrInternalServer + ": user not found"),
 			Err: err,
 		}
@@ -80,26 +79,30 @@ func (cfg *apiConfig) getUserInfo(ctx context.Context, payload requestPayload) (
 	return userResponse, nil
 }
 
-func (cfg *apiConfig) generateTokens(user *User, ctx context.Context) (User, *HTTPError){
-	cfg.generateJWT(user)
-	cfg.generateRefreshToken(user, ctx)
-	return *user, nil
+func (cfg *apiConfig) generateTokens(user *User, ctx context.Context) *HTTPError{
+	if err := cfg.generateJWT(user); err != nil {
+		return err
+	}
+	if err := cfg.generateRefreshToken(user, ctx); err != nil {
+		return err
+	}
+	return nil
 }
 
-func (cfg *apiConfig) generateJWT(user *User) (User, *HTTPError) {
-	token, err := auth.MakeJWT(user.ID, cfg.tokenSecret, time.Hour)
+func (cfg *apiConfig) generateJWT(user *User) *HTTPError {
+	token, err := auth.MakeJWT(user.ID, string(cfg.tokenSecret), time.Hour)
 	if err != nil {
-		return User{}, &HTTPError{
+		return &HTTPError{
 			StatusCode: http.StatusInternalServerError,
 			Message: (ErrInternalServer + ": error generating token"),
 			Err: err,
 		}
 	}
 	user.Token = token
-	return *user, nil
+	return nil
 }
 
-func (cfg *apiConfig) generateRefreshToken(user *User, ctx context.Context) (User, *HTTPError){
+func (cfg *apiConfig) generateRefreshToken(user *User, ctx context.Context) *HTTPError{
 	var refreshTokenParams database.CreateRefreshTokenParams = database.CreateRefreshTokenParams{
 	UserID: user.ID,
 	Token: auth.MakeRefreshToken(),
@@ -107,12 +110,12 @@ func (cfg *apiConfig) generateRefreshToken(user *User, ctx context.Context) (Use
 	}
 	refreshToken, err := cfg.dbQueries.CreateRefreshToken(ctx, refreshTokenParams)
 	if err != nil {
-		return *user, &HTTPError{
+		return &HTTPError{
 			StatusCode: http.StatusInternalServerError,
 			Message: (ErrInternalServer + ": error creating refresh token"),
 			Err: err,
 		}
 	}
 	user.RefreshToken = refreshToken.Token
-	return *user, nil
+	return nil
 }

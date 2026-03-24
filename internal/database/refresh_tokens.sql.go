@@ -12,23 +12,6 @@ import (
 	"github.com/google/uuid"
 )
 
-const checkTokenStatus = `-- name: CheckTokenStatus :one
-SELECT EXISTS (
-    SELECT 1
-    FROM refresh_tokens
-    WHERE token = $1
-    AND expires_at > NOW()
-    AND revoked_at IS NULL
-) AS is_valid
-`
-
-func (q *Queries) CheckTokenStatus(ctx context.Context, token string) (bool, error) {
-	row := q.db.QueryRowContext(ctx, checkTokenStatus, token)
-	var is_valid bool
-	err := row.Scan(&is_valid)
-	return is_valid, err
-}
-
 const createRefreshToken = `-- name: CreateRefreshToken :one
 INSERT INTO refresh_tokens(token,created_at,updated_at,user_id,expires_at,revoked_at)
 VALUES(
@@ -62,7 +45,10 @@ func (q *Queries) CreateRefreshToken(ctx context.Context, arg CreateRefreshToken
 	return i, err
 }
 
-const getUserFromRefreshToken = `-- name: GetUserFromRefreshToken :one
+const getUserFromValidRefreshToken = `-- name: GetUserFromValidRefreshToken :one
+
+
+
 SELECT users.id, users.created_at, users.updated_at, users.email, users.password
 FROM users
 JOIN refresh_tokens ON users.id = refresh_tokens.user_id
@@ -71,8 +57,25 @@ AND refresh_tokens.expires_at > NOW()
 AND refresh_tokens.revoked_at IS NULL
 `
 
-func (q *Queries) GetUserFromRefreshToken(ctx context.Context, token string) (User, error) {
-	row := q.db.QueryRowContext(ctx, getUserFromRefreshToken, token)
+// -- name: GetUserFromRefreshToken :one
+// SELECT users.*
+// FROM users
+// JOIN refresh_tokens ON users.id = refresh_tokens.user_id
+// WHERE refresh_tokens.token = $1
+// AND refresh_tokens.expires_at > NOW()
+// AND refresh_tokens.revoked_at IS NULL;
+// -- name: CheckTokenStatus :one
+// SELECT EXISTS (
+//
+//	SELECT 1
+//	FROM refresh_tokens
+//	WHERE token = $1
+//	AND expires_at > NOW()
+//	AND revoked_at IS NULL
+//
+// ) AS is_valid;
+func (q *Queries) GetUserFromValidRefreshToken(ctx context.Context, token string) (User, error) {
+	row := q.db.QueryRowContext(ctx, getUserFromValidRefreshToken, token)
 	var i User
 	err := row.Scan(
 		&i.ID,

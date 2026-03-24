@@ -17,11 +17,20 @@ type chirpPayload struct{
 	UserID uuid.UUID `json:"user_id"`
 }
 
+func newChirpPayload(chirp database.Chirp) chirpPayload{
+	return chirpPayload{
+		ID: chirp.ID,
+		CreatedAt: chirp.CreatedAt,
+		UpdatedAt: chirp.UpdatedAt,
+		Body: chirp.Body,
+		UserID: chirp.UserID,
+	}
+}
+
 
 func (cfg *apiConfig)createChirpHandler(w http.ResponseWriter, req *http.Request){
 	type requestPayload struct{
 		Body string `json:"body"`
-		UserID uuid.UUID `json:"user_id"`
 	}
 
 	var payload requestPayload = requestPayload{}
@@ -29,7 +38,7 @@ func (cfg *apiConfig)createChirpHandler(w http.ResponseWriter, req *http.Request
 	defer req.Body.Close()
 	if err := decoder.Decode(&payload); err != nil{
 		httpError := &HTTPError{
-			StatusCode: http.StatusInternalServerError,
+			StatusCode: http.StatusBadRequest,
 			Message: ErrDecodingRequest,
 			Err: err,
 		}
@@ -48,7 +57,7 @@ func (cfg *apiConfig)createChirpHandler(w http.ResponseWriter, req *http.Request
 		return
 	}
 
-	userID, err := auth.ValidateJWT(token, cfg.tokenSecret)
+	userID, err := auth.ValidateJWT(token, string(cfg.tokenSecret))
 	if err != nil {
 		httpError := &HTTPError{
 			StatusCode: http.StatusUnauthorized,
@@ -78,13 +87,7 @@ func (cfg *apiConfig)createChirpHandler(w http.ResponseWriter, req *http.Request
 		return
 	}
 
-	newChirp := chirpPayload{
-		ID: chirp.ID,
-		CreatedAt: chirp.CreatedAt,
-		UpdatedAt: chirp.UpdatedAt,
-		Body: chirp.Body,
-		UserID: chirp.UserID,
-	}
+	newChirp := newChirpPayload(chirp)
 
 	jsonResponse(w, http.StatusCreated, newChirp)
 }
@@ -103,13 +106,7 @@ func (cfg *apiConfig)getAllChirpsHandler(w http.ResponseWriter, req *http.Reques
 
 	var response []chirpPayload = make([]chirpPayload,0, len(chirps))
 	for _, chirp := range chirps{
-		response = append(response, chirpPayload{
-			ID: chirp.ID,
-			CreatedAt: chirp.CreatedAt,
-			UpdatedAt: chirp.UpdatedAt,
-			Body: chirp.Body,
-			UserID: chirp.UserID,
-		})
+		response = append(response, newChirpPayload(chirp))
 	}
 	jsonResponse(w, http.StatusOK, response)
 }
@@ -137,13 +134,7 @@ func (cfg *apiConfig)getSingleChirpHandler(w http.ResponseWriter, req *http.Requ
 		return
 	}
 
-	response := chirpPayload{
-		ID: chirp.ID,
-		CreatedAt: chirp.CreatedAt,
-		UpdatedAt: chirp.UpdatedAt,
-		Body: chirp.Body,
-		UserID: chirp.UserID,
-	}
+	response := newChirpPayload(chirp)
 
 	jsonResponse(w, http.StatusOK, response)
 }

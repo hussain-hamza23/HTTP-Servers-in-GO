@@ -11,22 +11,31 @@ VALUES(
 RETURNING *;
 
 
--- name: GetUserFromRefreshToken :one
+-- -- name: GetUserFromRefreshToken :one
+-- SELECT users.*
+-- FROM users
+-- JOIN refresh_tokens ON users.id = refresh_tokens.user_id
+-- WHERE refresh_tokens.token = $1
+-- AND refresh_tokens.expires_at > NOW()
+-- AND refresh_tokens.revoked_at IS NULL;
+
+-- -- name: CheckTokenStatus :one
+-- SELECT EXISTS (
+--     SELECT 1
+--     FROM refresh_tokens
+--     WHERE token = $1
+--     AND expires_at > NOW()
+--     AND revoked_at IS NULL
+-- ) AS is_valid;
+
+
+-- name: GetUserFromValidRefreshToken :one
 SELECT users.*
 FROM users
 JOIN refresh_tokens ON users.id = refresh_tokens.user_id
 WHERE refresh_tokens.token = $1
 AND refresh_tokens.expires_at > NOW()
 AND refresh_tokens.revoked_at IS NULL;
-
--- name: CheckTokenStatus :one
-SELECT EXISTS (
-    SELECT 1
-    FROM refresh_tokens
-    WHERE token = $1
-    AND expires_at > NOW()
-    AND revoked_at IS NULL
-) AS is_valid;
 
 
 -- name: RevokeRefreshToken :exec
