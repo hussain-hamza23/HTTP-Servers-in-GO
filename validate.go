@@ -9,28 +9,58 @@ import (
 	"strings"
 )
 
-func errorResponse(w http.ResponseWriter, statusCode int, message string){
+type HTTPError struct{
+	StatusCode int
+	Message string
+	Err error
+}
+func (err *HTTPError) Error() string{
+	return err.Message
+}
+
+var (
+	ErrInvalidCredentials = "incorrect email or password"
+	ErrUserNotFound = "user not found"
+	ErrInvalidToken = "invalid token"
+	ErrInternalServer = "internal server error"
+	ErrResponse = "error writing response"
+
+	ErrEncodingResponse = "error encoding response"
+	ErrDecodingRequest = "error decoding request"
+)
+
+func (httpError *HTTPError) errorResponse(w http.ResponseWriter){
 	type errorResponse struct{
-		Error string `json:"error"`
+		ErrorMessage string `json:"error"`
+		Error string `json:"error_details,omitempty"`
+	}
+	var errDetails string
+	if httpError.Err != nil {
+		errDetails = httpError.Err.Error()
 	}
 
 	response := errorResponse{
-		Error: message,
+		ErrorMessage: httpError.Error(),
+		Error: errDetails,
 	}
-	jsonResponse(w, statusCode, response)
+	jsonResponse(w, httpError.StatusCode, response)
 }
 
-func jsonResponse(w http.ResponseWriter, statusCode int, data interface{}){
-	w.WriteHeader(statusCode)
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	dat, err := json.Marshal(data)
-	if err != nil {
-		errorResponse(w, http.StatusInternalServerError, fmt.Sprintf("Error encoding response: %s", err))
-		return
-	}
-	if _, err := w.Write(dat); err != nil {
-		log.Printf("Error writing JSON response: %s\n", err)
-	}
+func jsonResponse(w http.ResponseWriter, statusCode int, data interface{}) {
+    dat, err := json.Marshal(data)
+    if err != nil {
+        w.Header().Set("Content-Type", "application/json; charset=utf-8")
+        w.WriteHeader(http.StatusInternalServerError)
+        w.Write([]byte(`{"error":"` + ErrEncodingResponse + `"}`))
+        return
+    }
+
+    w.Header().Set("Content-Type", "application/json; charset=utf-8")
+    w.WriteHeader(statusCode)
+    if _, err := w.Write(dat); err != nil {
+		//w.Write failure is unrecoverable
+        log.Printf(ErrResponse + ": %v", err)
+    }
 }
 
 // func validateLengthHandler(w http.ResponseWriter, req *http.Request) (string, error) {
@@ -66,13 +96,17 @@ func validateLengthHandler(w http.ResponseWriter, chirp string) (string, error) 
 	const maxLength int = 140
 
 	if len(chirp) > maxLength{
-		errorResponse(w, http.StatusBadRequest, fmt.Sprintf("Body exceeds %d characters", maxLength))
+		httpError := &HTTPError{
+			StatusCode: http.StatusBadRequest,
+			Message: fmt.Sprintf("Body exceeds %d characters", maxLength),
+		}
+		httpError.errorResponse(w)
 		return "", errors.New("Body exceeds maximum length")
 	}
-
 	var cleanedBody string = profanityChecker(chirp)
 	return cleanedBody, nil
 }
+
 
 
 func profanityChecker(body string) string{

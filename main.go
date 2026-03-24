@@ -20,6 +20,7 @@ type filePaths struct {
 type apiConfig struct{
 	fileserverHits atomic.Int32
 	dbQueries *database.Queries
+	tokenSecret string
 	role string
 }
 
@@ -38,6 +39,8 @@ func getHandlers(mux *http.ServeMux, fileDirs filePaths, cfg *apiConfig){
 	mux.HandleFunc("GET /api/chirps", cfg.getAllChirpsHandler)
 	mux.HandleFunc("GET /api/chirps/{id}", cfg.getSingleChirpHandler)
 	mux.HandleFunc("POST /api/login", cfg.loginHandler)
+	mux.HandleFunc("POST /api/refresh", cfg.refreshTokensHandler)
+	mux.HandleFunc("POST /api/revoke", cfg.revokeTokenHandler)
 }
 
 func handlerReadiness(w http.ResponseWriter, r *http.Request){
@@ -59,6 +62,10 @@ func main(){
 	}
 
 	var platform string = os.Getenv("PLATFORM")
+	var tokenSecret string = os.Getenv("SECRET")
+	if tokenSecret == "" {
+		log.Fatal("SECRET environment variable is not set")
+	}
 
 	db, err := sql.Open("postgres", dbURL)
 	if err != nil {
@@ -70,6 +77,7 @@ func main(){
 	var cfg apiConfig = apiConfig{
 		fileserverHits: atomic.Int32{},
 		dbQueries: database.New(db),
+		tokenSecret: tokenSecret,
 		role: platform,
 	}
 	var fileDirs filePaths = filePaths{

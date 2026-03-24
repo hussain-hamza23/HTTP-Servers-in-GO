@@ -18,7 +18,13 @@ func (cfg *apiConfig) numberofHits(w http.ResponseWriter, r *http.Request){
     <p>Chirpy has been visited %d times!</p>
   </body>
 </html>`, cfg.fileserverHits.Load()))); err != nil {
-		http.Error(w, "Failed to load hits", http.StatusInternalServerError)
+		
+		httpError := &HTTPError{
+			StatusCode: http.StatusInternalServerError,
+			Message: "Failed to load hits",
+			Err: err,
+		}
+		httpError.errorResponse(w)
 		return
 	}
 }

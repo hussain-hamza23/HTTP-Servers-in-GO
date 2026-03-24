@@ -17,6 +17,8 @@ type User struct{
 	UpdatedAt time.Time `json:"updated_at"`
 	Email string `json:"email"`
 	Password string `json:"password"`
+	Token string `json:"token,omitempty"`
+	RefreshToken string `json:"refresh_token,omitempty"`
 }
 
 func (cfg *apiConfig) createUserHandler(w http.ResponseWriter, req *http.Request){
@@ -29,12 +31,22 @@ func (cfg *apiConfig) createUserHandler(w http.ResponseWriter, req *http.Request
 	decoder := json.NewDecoder(req.Body)
 	defer req.Body.Close()
 	if err := decoder.Decode(&payload); err != nil{
-		errorResponse(w, http.StatusInternalServerError, "Error decoding parameters for user creation")
+		httpError := &HTTPError{
+			StatusCode: http.StatusInternalServerError,
+			Message: ErrDecodingRequest,
+			Err: err,
+		}
+		httpError.errorResponse(w)
 		return
 	}
 	hashedPassword, err := auth.HashPassword(payload.Password)
 	if err != nil {
-		errorResponse(w, http.StatusInternalServerError, "Error hashing password")
+		httpError := &HTTPError{
+			StatusCode: http.StatusInternalServerError,
+			Message: "Error hashing password",
+			Err: err,
+		}
+		httpError.errorResponse(w)
 		return
 	}
 
@@ -46,7 +58,12 @@ func (cfg *apiConfig) createUserHandler(w http.ResponseWriter, req *http.Request
 
 	user, err := cfg.dbQueries.CreateUser(req.Context(), userInfo)
 	if err != nil {
-		errorResponse(w, http.StatusInternalServerError, "Error creating user")
+		httpError := &HTTPError{
+			StatusCode: http.StatusInternalServerError,
+			Message: "Error creating user",
+			Err: err,
+		}
+		httpError.errorResponse(w)
 		return
 	}
 
@@ -55,6 +72,8 @@ func (cfg *apiConfig) createUserHandler(w http.ResponseWriter, req *http.Request
 		CreatedAt: user.CreatedAt,
 		UpdatedAt: user.UpdatedAt,
 		Email: user.Email,
+		Token: "",
+		RefreshToken: "",
 	}
 
 
